@@ -6,6 +6,7 @@ import (
 	"allinonekey/internal/util"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -14,6 +15,11 @@ import (
 type KeyHandler struct {
 	DB           *gorm.DB
 	QuotaService *service.QuotaService
+}
+
+type keyInput struct {
+	KeyName  string `json:"key_name"`
+	KeyValue string `json:"key_value"`
 }
 
 func (h *KeyHandler) List(c *gin.Context) {
@@ -53,21 +59,29 @@ func (h *KeyHandler) CheckQuota(c *gin.Context) {
 		h.QuotaService = &service.QuotaService{DB: h.DB}
 	}
 	result := h.QuotaService.UpdateQuotaForKey(k, c.GetString("master_key"))
+	h.DB.Where("id = ? AND user_id = ?", k.ID, c.GetUint("user_id")).First(&k)
 	h.DB.Create(&model.AuditLog{UserID: c.GetUint("user_id"), Action: "CHECK_KEY_QUOTA", Detail: fmt.Sprintf("Checked API key quota status: %s", result.Status), IP: c.ClientIP()})
-	if result.Error != "" {
-		c.JSON(200, gin.H{"status": result.Status, "error": result.Error})
-		return
+	response := gin.H{
+		"status":        result.Status,
+		"quota_total":   k.QuotaTotal,
+		"quota_used":    k.QuotaUsed,
+		"quota_balance": k.QuotaBalance,
+		"last_check":    k.LastCheck,
 	}
-	c.JSON(200, gin.H{"status": result.Status})
+	if result.Error != "" {
+		response["error"] = result.Error
+	}
+	c.JSON(200, response)
 }
 
 func (h *KeyHandler) CreateBulk(c *gin.Context) {
 	var in struct {
-		Provider string `json:"provider" binding:"required"`
-		Group    string `json:"pool_group"`
-		BaseURL  string `json:"base_url"`
-		ProxyURL string `json:"proxy_url"`
-		RawKeys  string `json:"raw_keys" binding:"required"`
+		Provider string     `json:"provider" binding:"required"`
+		Group    string     `json:"pool_group"`
+		BaseURL  string     `json:"base_url"`
+		ProxyURL string     `json:"proxy_url"`
+		RawKeys  string     `json:"raw_keys"`
+		Keys     []keyInput `json:"keys"`
 	}
 	if err := c.ShouldBindJSON(&in); err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
@@ -76,34 +90,58 @@ func (h *KeyHandler) CreateBulk(c *gin.Context) {
 	if in.Group == "" {
 		in.Group = "default"
 	}
+	items := normalizeKeyInputs(in.Keys, in.RawKeys)
+	if len(items) == 0 {
+		c.JSON(400, gin.H{"error": "at least one key is required"})
+		return
+	}
 
 	masterKey := c.GetString("master_key")
-	lines := strings.Split(in.RawKeys, "\n")
 	count := 0
-	for _, line := range lines {
-		val := strings.TrimSpace(line)
-		if val == "" {
-			continue
+	for _, item := range items {
+		name := strings.TrimSpace(item.KeyName)
+		val := strings.TrimSpace(item.KeyValue)
+		if name == "" || val == "" {
+			c.JSON(400, gin.H{"error": "key_name and key_value are required"})
+			return
 		}
 		enc, err := util.EncryptToString(val, masterKey)
 		if err != nil {
 			c.JSON(500, gin.H{"error": "Failed to encrypt key"})
 			return
 		}
-		h.DB.Create(&model.APIKey{
+		if err := h.DB.Create(&model.APIKey{
 			UserID:    c.GetUint("user_id"),
-			Provider:  in.Provider,
+			Provider:  strings.TrimSpace(in.Provider),
 			PoolGroup: in.Group,
-			KeyName:   in.Provider + "-" + util.ShortID(6),
+			KeyName:   name,
 			KeyValue:  enc,
-			BaseURL:   in.BaseURL,
-			ProxyURL:  in.ProxyURL,
+			BaseURL:   strings.TrimSpace(in.BaseURL),
+			ProxyURL:  strings.TrimSpace(in.ProxyURL),
 			Status:    "active",
-		})
+		}).Error; err != nil {
+			c.JSON(500, gin.H{"error": "Failed to create key"})
+			return
+		}
 		count++
 	}
-	h.DB.Create(&model.AuditLog{UserID: c.GetUint("user_id"), Action: "BULK_ADD_KEY", Detail: fmt.Sprintf("Added %d keys", count), IP: c.ClientIP()})
+	h.DB.Create(&model.AuditLog{UserID: c.GetUint("user_id"), Action: "ADD_KEY", Detail: fmt.Sprintf("Added %d keys", count), IP: c.ClientIP()})
 	c.JSON(200, gin.H{"message": "success", "count": count})
+}
+
+func normalizeKeyInputs(keys []keyInput, rawKeys string) []keyInput {
+	if len(keys) > 0 {
+		return keys
+	}
+	var items []keyInput
+	for _, line := range strings.Split(rawKeys, "\n") {
+		val := strings.TrimSpace(line)
+		if val == "" {
+			continue
+		}
+		items = append(items, keyInput{KeyValue: val})
+	}
+	return items
 }
 
 func (h *KeyHandler) Update(c *gin.Context) {
@@ -146,6 +184,7 @@ func (h *KeyHandler) Update(c *gin.Context) {
 			return
 		}
 		updates["key_value"] = enc
+		updates["last_check"] = time.Time{}
 	}
 	if len(updates) == 0 {
 		c.JSON(400, gin.H{"error": "No fields to update"})
