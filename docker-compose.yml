@@ -1,0 +1,17 @@
+services:
+  allinonekey:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PORT=8080
+      - GIN_MODE=release
+      - ALLINONEKEY_DB_PATH=/app/data/allinone.db
+      - ALLINONEKEY_DATA_DIR=/app/data
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - ALLINONEKEY_JWT_SECRET=${ALLINONEKEY_JWT_SECRET:?set ALLINONEKEY_JWT_SECRET before docker-up}
+      - ALLINONEKEY_SESSION_SECRET=${ALLINONEKEY_SESSION_SECRET:?set ALLINONEKEY_SESSION_SECRET before docker-up}
+    restart: always

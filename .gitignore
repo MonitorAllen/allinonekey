@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+web/node_modules/
+
+# Build outputs
+allinone-server
+web/dist/
+dist/
+build/
+
+# Local database and data
+*.db
+*.db-shm
+*.db-wal
+data/
+
+# Logs
+*.log
+logs/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Temporary files
+.tmp/
+tmp/
+.cache/
