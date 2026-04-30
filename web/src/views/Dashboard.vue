@@ -17,6 +17,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  ServerCog,
   ShieldCheck,
   Ticket,
   Trash2,
@@ -74,6 +75,12 @@ const showKeyModal = ref(false);
 const editingKeyId = ref<number | null>(null);
 const showAccountModal = ref(false);
 const editingAccountId = ref<number | null>(null);
+const showModelsModal = ref(false);
+const modelListTitle = ref('');
+const loadingModels = ref(false);
+const modelListStatus = ref('');
+const modelListError = ref('');
+const keyModels = ref<any[]>([]);
 const importFile = ref<File | null>(null);
 
 const auditFilters = reactive({ action: '', keyword: '' });
@@ -402,6 +409,26 @@ const checkKeyQuota = async (id: number) => {
   }
 };
 
+const listKeyModels = async (key: any) => {
+  showModelsModal.value = true;
+  modelListTitle.value = key.key_name || `Key #${key.id}`;
+  loadingModels.value = true;
+  modelListStatus.value = '';
+  modelListError.value = '';
+  keyModels.value = [];
+  try {
+    const res = await api.get(`/keys/${key.id}/models`);
+    modelListStatus.value = res.data?.status || 'quota_error';
+    modelListError.value = res.data?.error || '';
+    keyModels.value = res.data?.models || [];
+    showToast(`Models loaded: ${keyModels.value.length}`);
+  } catch (error) {
+    handleError(error);
+  } finally {
+    loadingModels.value = false;
+  }
+};
+
 const generateInvite = async () => {
   try {
     await api.post('/admin/invites', { expires_in_hours: inviteExpiresInHours.value });
@@ -551,7 +578,7 @@ const handleLogout = async () => {
                   <td class="px-6 py-4"><span :class="['px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border', keyStatusClass(k.status)]">{{ k.status }}</span><p class="text-[11px] text-gray-600 mt-2">{{ formatDate(k.last_check) }}</p></td>
                   <td class="px-6 py-4 text-xs text-gray-400"><p class="text-gray-300">Availability only</p><p class="mt-1 text-[11px] text-gray-600">Real usage/billing is deferred.</p></td>
                   <td class="px-6 py-4 text-xs text-gray-500 max-w-xs"><p class="truncate">{{ k.base_url || 'Default endpoint' }}</p><p v-if="k.proxy_url" class="truncate text-yellow-500/80">Proxy: {{ k.proxy_url }}</p></td>
-                  <td class="px-6 py-4 text-right"><button @click="checkKeyQuota(k.id)" class="mr-3 text-xs text-gray-500 hover:text-yellow-400">Check</button><button @click="openEditKeyModal(k)" class="mr-3 text-gray-600 hover:text-blue-400"><Edit3 class="w-4 h-4"/></button><button @click="deleteItem('keys', k.id)" class="text-gray-600 hover:text-red-400"><Trash2 class="w-4 h-4"/></button></td>
+                  <td class="px-6 py-4 text-right"><button @click="checkKeyQuota(k.id)" class="mr-3 text-xs text-gray-500 hover:text-yellow-400">Check</button><button @click="listKeyModels(k)" class="mr-3 text-xs text-gray-500 hover:text-cyan-300">Models</button><button @click="openEditKeyModal(k)" class="mr-3 text-gray-600 hover:text-blue-400"><Edit3 class="w-4 h-4"/></button><button @click="deleteItem('keys', k.id)" class="text-gray-600 hover:text-red-400"><Trash2 class="w-4 h-4"/></button></td>
                 </tr>
               </tbody>
             </table>
@@ -603,6 +630,23 @@ const handleLogout = async () => {
           <div v-if="editingKeyId"><label class="text-xs font-bold text-gray-500 uppercase">Status</label><input v-model="keyForm.status" class="w-full vault-input rounded-xl p-2.5 text-sm" /></div>
         </div>
         <div class="p-6 bg-white/[0.035] flex justify-end gap-3"><button @click="saveKeys" class="vault-primary-btn px-6 py-2 rounded-xl font-semibold">Save</button></div>
+      </div>
+    </div>
+
+    <div v-if="showModelsModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div class="vault-card rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl">
+        <div class="p-6 border-b border-white/10 flex justify-between items-center"><div><h3 class="text-xl font-bold flex items-center gap-2"><ServerCog class="w-5 h-5 text-cyan-300"/> {{ modelListTitle }}</h3><p class="text-xs text-gray-500 mt-1">Provider model list · status: {{ modelListStatus || 'loading' }}</p></div><button @click="showModelsModal = false"><X class="w-6 h-6"/></button></div>
+        <div class="p-6 max-h-[65vh] overflow-y-auto">
+          <div v-if="loadingModels" class="py-12 text-center text-gray-500">Loading models...</div>
+          <div v-else-if="modelListError" class="rounded-2xl border border-red-400/20 bg-red-950/30 p-4 text-sm text-red-100">{{ modelListError }}</div>
+          <div v-else-if="keyModels.length === 0" class="py-12 text-center text-gray-600">No models returned.</div>
+          <div v-else class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div v-for="m in keyModels" :key="m.id || m.name" class="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
+              <p class="font-mono text-sm text-cyan-100 break-all">{{ m.id || m.name }}</p>
+              <p v-if="m.owned_by" class="text-xs text-gray-500 mt-2">{{ m.owned_by }}</p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
