@@ -26,7 +26,10 @@ type exportPayload struct {
 	Accounts   []model.Account `json:"accounts"`
 }
 
-const maxImportItems = 5000
+const (
+	maxImportItems = 5000
+	appVersion     = "0.1.0"
+)
 
 func (h *ExportHandler) ExportJSON(c *gin.Context) {
 	userID := c.GetUint("user_id")
@@ -38,7 +41,7 @@ func (h *ExportHandler) ExportJSON(c *gin.Context) {
 
 func (h *ExportHandler) ExportKeysJSON(c *gin.Context) {
 	userID := c.GetUint("user_id")
-	payload := exportPayload{ExportedAt: time.Now(), Version: "0.0.0", APIKeys: h.userKeys(userID)}
+	payload := exportPayload{ExportedAt: time.Now(), Version: appVersion, APIKeys: h.userKeys(userID)}
 	c.Header("Content-Disposition", "attachment; filename=allinonekey-keys.json")
 	c.JSON(http.StatusOK, payload)
 	h.DB.Create(&model.AuditLog{UserID: userID, Action: "EXPORT_KEYS_JSON", Detail: "Exported encrypted API Keys JSON data", IP: c.ClientIP()})
@@ -46,7 +49,7 @@ func (h *ExportHandler) ExportKeysJSON(c *gin.Context) {
 
 func (h *ExportHandler) ExportAccountsJSON(c *gin.Context) {
 	userID := c.GetUint("user_id")
-	payload := exportPayload{ExportedAt: time.Now(), Version: "0.0.0", Accounts: h.userAccounts(userID)}
+	payload := exportPayload{ExportedAt: time.Now(), Version: appVersion, Accounts: h.userAccounts(userID)}
 	c.Header("Content-Disposition", "attachment; filename=allinonekey-accounts.json")
 	c.JSON(http.StatusOK, payload)
 	h.DB.Create(&model.AuditLog{UserID: userID, Action: "EXPORT_ACCOUNTS_JSON", Detail: "Exported encrypted Accounts JSON data", IP: c.ClientIP()})
@@ -217,7 +220,7 @@ func (h *ExportHandler) importPayload(c *gin.Context, payload exportPayload) (in
 }
 
 func (h *ExportHandler) exportPayload(userID uint) exportPayload {
-	return exportPayload{ExportedAt: time.Now(), Version: "0.0.0", APIKeys: h.userKeys(userID), Accounts: h.userAccounts(userID)}
+	return exportPayload{ExportedAt: time.Now(), Version: appVersion, APIKeys: h.userKeys(userID), Accounts: h.userAccounts(userID)}
 }
 
 func (h *ExportHandler) userKeys(userID uint) []model.APIKey {

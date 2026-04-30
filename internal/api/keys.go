@@ -60,7 +60,7 @@ func (h *KeyHandler) CheckQuota(c *gin.Context) {
 	}
 	result := h.QuotaService.UpdateQuotaForKey(k, c.GetString("master_key"))
 	h.DB.Where("id = ? AND user_id = ?", k.ID, c.GetUint("user_id")).First(&k)
-	h.DB.Create(&model.AuditLog{UserID: c.GetUint("user_id"), Action: "CHECK_KEY_QUOTA", Detail: fmt.Sprintf("Checked API key quota status: %s", result.Status), IP: c.ClientIP()})
+	h.DB.Create(&model.AuditLog{UserID: c.GetUint("user_id"), Action: "CHECK_KEY_HEALTH", Detail: fmt.Sprintf("Checked API key health status: %s", result.Status), IP: c.ClientIP()})
 	response := gin.H{
 		"status":        result.Status,
 		"quota_total":   k.QuotaTotal,

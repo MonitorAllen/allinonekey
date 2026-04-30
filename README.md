@@ -4,7 +4,7 @@ Lightweight AI API Key & Personal Account Manager.
 
 ## Version
 
-Current version: `0.0.0`
+Current version: `0.1.0`
 
 The project follows SemVer-style `MAJOR.MINOR.PATCH` versioning.
 Git tags use `vX.Y.Z`, for example `v0.1.0`.
@@ -23,7 +23,8 @@ Git tags use `vX.Y.Z`, for example `v0.1.0`.
 - Login brute-force cooldown
 - Admin-only invitation management
 - Audit logs
-- Encrypted JSON / CSV export and JSON import
+- Encrypted JSON / CSV export and scoped JSON / CSV import
+- API Key health probing is availability-only; real usage/billing lookup is deferred until official usage/cost/billing APIs or a new-api-compatible integration is modeled separately
 - Offline decrypt helper for exported ciphertext
 - Docker-ready deployment with host UID/GID data ownership protection
 

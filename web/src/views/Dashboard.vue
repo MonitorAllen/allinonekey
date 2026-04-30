@@ -144,7 +144,6 @@ const resetAccountForm = () => {
 };
 
 const providerName = () => (keyForm.provider === 'Custom' ? keyForm.custom_provider.trim() : keyForm.provider);
-const formatNumber = (value: unknown) => (Number(value || 0) === 0 ? '—' : Number(value).toLocaleString());
 const formatDate = (value: string) => (value && !value.startsWith('0001-') ? new Date(value).toLocaleString() : 'Never');
 const keyStatusClass = (status: string) => {
   if (status === 'active') return 'text-green-400 bg-green-400/10 border-green-400/20';
@@ -395,7 +394,7 @@ const decryptAndCopy = async (id: number, type: SecretType, clipId: string) => {
 const checkKeyQuota = async (id: number) => {
   try {
     const res = await api.post(`/keys/${id}/check-quota`);
-    showToast(`Quota check: ${res.data?.status || 'quota_error'}`);
+    showToast(`Health check: ${res.data?.status || 'quota_error'}`);
     fetchKeys();
     fetchStats();
   } catch (error) {
@@ -536,7 +535,7 @@ const handleLogout = async () => {
           <div class="bg-gray-900 p-6 rounded-xl border border-gray-800 flex items-center gap-4"><div class="p-3 bg-blue-600/10 text-blue-400 rounded-lg"><Key class="w-6 h-6"/></div><div><p class="text-xs text-gray-500 uppercase">Total Keys</p><p class="text-2xl font-bold">{{ keyStats.total }}</p></div></div>
           <div class="bg-gray-900 p-6 rounded-xl border border-gray-800 flex items-center gap-4"><div class="p-3 bg-green-600/10 text-green-400 rounded-lg"><CheckCircle2 class="w-6 h-6"/></div><div><p class="text-xs text-gray-500 uppercase">Active</p><p class="text-2xl font-bold">{{ keyStats.active }}</p></div></div>
           <div class="bg-gray-900 p-6 rounded-xl border border-gray-800 flex items-center gap-4"><div class="p-3 bg-red-600/10 text-red-400 rounded-lg"><AlertCircle class="w-6 h-6"/></div><div><p class="text-xs text-gray-500 uppercase">Issues</p><p class="text-2xl font-bold">{{ keyStats.error }}</p></div></div>
-          <div class="bg-gray-900 p-6 rounded-xl border border-gray-800 flex items-center gap-4"><div class="p-3 bg-yellow-600/10 text-yellow-400 rounded-lg"><RefreshCw :class="['w-6 h-6', loadingStats ? 'animate-spin' : '']"/></div><div><p class="text-xs text-gray-500 uppercase">Balance</p><p class="text-2xl font-bold">{{ formatNumber(keyStats.balance) }}</p></div></div>
+          <div class="bg-gray-900 p-6 rounded-xl border border-gray-800 flex items-center gap-4"><div class="p-3 bg-yellow-600/10 text-yellow-400 rounded-lg"><RefreshCw :class="['w-6 h-6', loadingStats ? 'animate-spin' : '']"/></div><div><p class="text-xs text-gray-500 uppercase">Health</p><p class="text-2xl font-bold">{{ keyStats.active }}/{{ keyStats.total }}</p></div></div>
         </div>
         <div v-if="loadingKeys" class="text-center py-10 text-gray-500">Loading keys...</div>
         <div v-for="(pools, provider) in groupedKeys" :key="provider" class="space-y-4">
@@ -544,13 +543,13 @@ const handleLogout = async () => {
           <div v-for="(keysInGroup, groupName) in pools" :key="groupName" class="bg-gray-900 rounded-2xl border border-gray-800 overflow-x-auto">
             <div class="bg-gray-800/30 px-6 py-3 border-b border-gray-800 flex justify-between items-center text-xs font-bold uppercase tracking-wider text-gray-500"><span>Pool: {{ groupName }}</span><span>{{ keysInGroup.length }} Keys</span></div>
             <table class="w-full min-w-[980px] text-left">
-              <thead class="text-xs uppercase text-gray-500"><tr><th class="px-6 py-3">Key</th><th class="px-6 py-3">Secret</th><th class="px-6 py-3">Status</th><th class="px-6 py-3">Quota Detail</th><th class="px-6 py-3">Endpoint</th><th class="px-6 py-3 text-right">Actions</th></tr></thead>
+              <thead class="text-xs uppercase text-gray-500"><tr><th class="px-6 py-3">Key</th><th class="px-6 py-3">Secret</th><th class="px-6 py-3">Status</th><th class="px-6 py-3">Health Probe</th><th class="px-6 py-3">Endpoint</th><th class="px-6 py-3 text-right">Actions</th></tr></thead>
               <tbody class="divide-y divide-gray-800">
                 <tr v-for="k in keysInGroup" :key="k.id" class="hover:bg-gray-800/20 transition-colors">
                   <td class="px-6 py-4"><p class="text-sm font-semibold">{{ k.key_name }}</p><p class="text-xs text-gray-500">#{{ k.id }}</p></td>
                   <td class="px-6 py-4 font-mono text-xs text-gray-500"><button @click="decryptAndCopy(k.id, 'keys', 'k'+k.id)" class="flex items-center gap-2 hover:text-blue-400"><span>sk-••••••••••••</span><Check v-if="copiedId === 'k'+k.id" class="w-4 h-4 text-green-500"/><Copy v-else class="w-4 h-4"/></button></td>
                   <td class="px-6 py-4"><span :class="['px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border', keyStatusClass(k.status)]">{{ k.status }}</span><p class="text-[11px] text-gray-600 mt-2">{{ formatDate(k.last_check) }}</p></td>
-                  <td class="px-6 py-4 text-xs text-gray-400"><div class="grid grid-cols-3 gap-2"><span>Total<br><b class="text-gray-200">{{ formatNumber(k.quota_total) }}</b></span><span>Used<br><b class="text-gray-200">{{ formatNumber(k.quota_used) }}</b></span><span>Balance<br><b class="text-gray-200">{{ formatNumber(k.quota_balance) }}</b></span></div></td>
+                  <td class="px-6 py-4 text-xs text-gray-400"><p class="text-gray-300">Availability only</p><p class="mt-1 text-[11px] text-gray-600">Real usage/billing is deferred.</p></td>
                   <td class="px-6 py-4 text-xs text-gray-500 max-w-xs"><p class="truncate">{{ k.base_url || 'Default endpoint' }}</p><p v-if="k.proxy_url" class="truncate text-yellow-500/80">Proxy: {{ k.proxy_url }}</p></td>
                   <td class="px-6 py-4 text-right"><button @click="checkKeyQuota(k.id)" class="mr-3 text-xs text-gray-500 hover:text-yellow-400">Check</button><button @click="openEditKeyModal(k)" class="mr-3 text-gray-600 hover:text-blue-400"><Edit3 class="w-4 h-4"/></button><button @click="deleteItem('keys', k.id)" class="text-gray-600 hover:text-red-400"><Trash2 class="w-4 h-4"/></button></td>
                 </tr>
