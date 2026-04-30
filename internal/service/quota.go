@@ -1,7 +1,9 @@
 package service
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -22,6 +24,18 @@ type QuotaService struct {
 
 type QuotaCheckResult struct {
 	Status string
+	Error  string
+}
+
+type ProviderModel struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	OwnedBy string `json:"owned_by,omitempty"`
+}
+
+type ModelListResult struct {
+	Status string
+	Models []ProviderModel
 	Error  string
 }
 
@@ -62,6 +76,14 @@ func (s *QuotaService) UpdateQuotaForKey(k model.APIKey, mk string) QuotaCheckRe
 	return result
 }
 
+func (s *QuotaService) ListModelsForKey(k model.APIKey, mk string) ModelListResult {
+	plainKey, err := util.DecryptToString(k.KeyValue, mk)
+	if err != nil {
+		return ModelListResult{Status: "decrypt_error", Error: "decrypt failed"}
+	}
+	return listProviderModels(k.Provider, k.BaseURL, k.ProxyURL, plainKey)
+}
+
 func (s *QuotaService) updateKeyQuotaState(k *model.APIKey, status string, total float64, used float64, balance float64) {
 	s.DB.Model(k).Updates(map[string]any{
 		"status":        status,
@@ -89,6 +111,26 @@ func probeProvider(provider string, baseURL string, proxyURL string, key string)
 			return probeOpenAICompatible(customBaseURL, proxyURL, key)
 		}
 		return QuotaCheckResult{Status: "quota_unsupported", Error: "provider quota check unsupported"}
+	}
+}
+
+func listProviderModels(provider string, baseURL string, proxyURL string, key string) ModelListResult {
+	providerName := strings.ToLower(strings.TrimSpace(provider))
+	customBaseURL := strings.TrimSpace(baseURL)
+	switch providerName {
+	case "openai", "openai-compatible", "custom", "relay", "proxy":
+		return listOpenAICompatibleModels(defaultBaseURL(customBaseURL, "https://api.openai.com"), proxyURL, key)
+	case "deepseek":
+		return listOpenAICompatibleModels(defaultBaseURL(customBaseURL, "https://api.deepseek.com"), proxyURL, key)
+	case "anthropic", "claude":
+		return listAnthropicModels(defaultBaseURL(customBaseURL, "https://api.anthropic.com"), proxyURL, key)
+	case "gemini", "google":
+		return listGeminiModels(defaultBaseURL(customBaseURL, "https://generativelanguage.googleapis.com"), proxyURL, key)
+	default:
+		if customBaseURL != "" {
+			return listOpenAICompatibleModels(customBaseURL, proxyURL, key)
+		}
+		return ModelListResult{Status: "quota_unsupported", Error: "provider model list unsupported"}
 	}
 }
 
@@ -138,6 +180,52 @@ func probeGemini(baseURL string, proxyURL string, key string) QuotaCheckResult {
 	return executeProbe(req, proxyURL)
 }
 
+func listOpenAICompatibleModels(baseURL string, proxyURL string, key string) ModelListResult {
+	endpoint, err := joinURL(baseURL, "/v1/models")
+	if err != nil {
+		return ModelListResult{Status: "quota_error", Error: "invalid base_url"}
+	}
+	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
+	if err != nil {
+		return ModelListResult{Status: "quota_error", Error: "failed to create request"}
+	}
+	req.Header.Set("Authorization", "Bearer "+key)
+	return executeModelList(req, proxyURL)
+}
+
+func listAnthropicModels(baseURL string, proxyURL string, key string) ModelListResult {
+	endpoint, err := joinURL(baseURL, "/v1/models")
+	if err != nil {
+		return ModelListResult{Status: "quota_error", Error: "invalid base_url"}
+	}
+	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
+	if err != nil {
+		return ModelListResult{Status: "quota_error", Error: "failed to create request"}
+	}
+	req.Header.Set("x-api-key", key)
+	req.Header.Set("anthropic-version", "2023-06-01")
+	return executeModelList(req, proxyURL)
+}
+
+func listGeminiModels(baseURL string, proxyURL string, key string) ModelListResult {
+	endpoint, err := joinURL(baseURL, "/v1beta/models")
+	if err != nil {
+		return ModelListResult{Status: "quota_error", Error: "invalid base_url"}
+	}
+	u, err := url.Parse(endpoint)
+	if err != nil {
+		return ModelListResult{Status: "quota_error", Error: "invalid base_url"}
+	}
+	q := u.Query()
+	q.Set("key", key)
+	u.RawQuery = q.Encode()
+	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
+	if err != nil {
+		return ModelListResult{Status: "quota_error", Error: "failed to create request"}
+	}
+	return executeModelList(req, proxyURL)
+}
+
 func executeProbe(req *http.Request, proxyURL string) QuotaCheckResult {
 	client, err := probeHTTPClient(proxyURL)
 	if err != nil {
@@ -159,6 +247,61 @@ func executeProbe(req *http.Request, proxyURL string) QuotaCheckResult {
 		return QuotaCheckResult{Status: "rate_limited", Error: "provider rate limited"}
 	}
 	return QuotaCheckResult{Status: "quota_error", Error: fmt.Sprintf("provider returned %d", resp.StatusCode)}
+}
+
+func executeModelList(req *http.Request, proxyURL string) ModelListResult {
+	client, err := probeHTTPClient(proxyURL)
+	if err != nil {
+		return ModelListResult{Status: "quota_error", Error: "invalid proxy_url"}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return ModelListResult{Status: "quota_error", Error: "provider request failed"}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return ModelListResult{Status: "auth_error", Error: fmt.Sprintf("provider returned %d", resp.StatusCode)}
+	}
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return ModelListResult{Status: "rate_limited", Error: "provider rate limited"}
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return ModelListResult{Status: "quota_error", Error: fmt.Sprintf("provider returned %d", resp.StatusCode)}
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	if err != nil {
+		return ModelListResult{Status: "quota_error", Error: "failed to read provider response"}
+	}
+	models, err := parseModelList(body)
+	if err != nil {
+		return ModelListResult{Status: "quota_error", Error: "failed to parse provider models"}
+	}
+	return ModelListResult{Status: "active", Models: models}
+}
+
+func parseModelList(body []byte) ([]ProviderModel, error) {
+	var payload struct {
+		Data   []ProviderModel `json:"data"`
+		Models []ProviderModel `json:"models"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, err
+	}
+	models := payload.Data
+	if len(models) == 0 {
+		models = payload.Models
+	}
+	for i := range models {
+		if models[i].Name == "" {
+			models[i].Name = models[i].ID
+		}
+	}
+	if models == nil {
+		models = []ProviderModel{}
+	}
+	return models, nil
 }
 
 func probeHTTPClient(proxyURL string) (*http.Client, error) {

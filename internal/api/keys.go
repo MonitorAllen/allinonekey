@@ -74,6 +74,24 @@ func (h *KeyHandler) CheckQuota(c *gin.Context) {
 	c.JSON(200, response)
 }
 
+func (h *KeyHandler) ListModels(c *gin.Context) {
+	var k model.APIKey
+	if err := h.DB.Where("id = ? AND user_id = ?", c.Param("id"), c.GetUint("user_id")).First(&k).Error; err != nil {
+		c.JSON(404, gin.H{"error": "not found"})
+		return
+	}
+	if h.QuotaService == nil {
+		h.QuotaService = &service.QuotaService{DB: h.DB}
+	}
+	result := h.QuotaService.ListModelsForKey(k, c.GetString("master_key"))
+	h.DB.Create(&model.AuditLog{UserID: c.GetUint("user_id"), Action: "LIST_KEY_MODELS", Detail: fmt.Sprintf("Listed API key models: %s", result.Status), IP: c.ClientIP()})
+	response := gin.H{"status": result.Status, "models": result.Models}
+	if result.Error != "" {
+		response["error"] = result.Error
+	}
+	c.JSON(200, response)
+}
+
 func (h *KeyHandler) CreateBulk(c *gin.Context) {
 	var in struct {
 		Provider string     `json:"provider" binding:"required"`

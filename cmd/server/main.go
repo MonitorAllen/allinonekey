@@ -67,6 +67,7 @@ func main() {
 		apiGroup.POST("/keys/bulk", keysH.CreateBulk)
 		apiGroup.POST("/keys/create", keysH.CreateBulk)
 		apiGroup.POST("/keys/:id/check-quota", keysH.CheckQuota)
+		apiGroup.GET("/keys/:id/models", keysH.ListModels)
 		apiGroup.PATCH("/keys/:id", keysH.Update)
 		apiGroup.DELETE("/keys/:id", keysH.Delete)
 		apiGroup.GET("/keys/:id/decrypt", keysH.Decrypt)
