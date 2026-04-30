@@ -85,7 +85,7 @@ jobs:
           mkdir -p dist/allinonekey-${{ needs.validate.outputs.version }}-linux-amd64
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags='-s -w' -o dist/allinonekey-${{ needs.validate.outputs.version }}-linux-amd64/allinone-server ./cmd/server/main.go
           cp -r web/dist dist/allinonekey-${{ needs.validate.outputs.version }}-linux-amd64/web
-          cp README.md REQUIREMENTS.md .env.example docker-compose.yml Dockerfile docker-entrypoint.sh dist/allinonekey-${{ needs.validate.outputs.version }}-linux-amd64/
+          cp README.md REQUIREMENTS.md docker-compose.yml Dockerfile docker-entrypoint.sh dist/allinonekey-${{ needs.validate.outputs.version }}-linux-amd64/
           tar -C dist -czf dist/allinonekey-${{ needs.validate.outputs.version }}-linux-amd64.tar.gz allinonekey-${{ needs.validate.outputs.version }}-linux-amd64
 
       - name: Generate checksums

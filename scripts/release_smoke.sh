@@ -23,8 +23,13 @@ trap cleanup EXIT
 
 cd "${ROOT_DIR}"
 rm -f "${DB_FILE}" "${DB_FILE}-wal" "${DB_FILE}-shm"
+GO_BIN="${GO_BIN:-$(command -v go)}"
+if [[ -z "${GO_BIN}" ]]; then
+  echo "go binary not found" >&2
+  exit 1
+fi
 export GOPROXY=https://goproxy.cn,direct
-/usr/local/go/bin/go build -o "${BIN_FILE}" ./cmd/server/main.go
+"${GO_BIN}" build -o "${BIN_FILE}" ./cmd/server/main.go
 
 if command -v make >/dev/null 2>&1; then
   make -s free-port-8080 >/dev/null 2>&1 || true
@@ -147,7 +152,7 @@ done
 LOCK_STATUS=$(curl -s -o /tmp/login-lock.json -w '%{http_code}' -X POST "${BASE_URL}/login" -H 'Content-Type: application/json' -d "{\"username\":\"${ADMIN_USER}\",\"master_key\":\"WrongKey123!\"}")
 test "${LOCK_STATUS}" = "429"
 
-/usr/local/go/bin/go run scripts/decrypt.go /tmp/allinonekey-export.json "${MASTER_KEY}" >/tmp/offline-decrypt.txt
+"${GO_BIN}" run scripts/decrypt.go /tmp/allinonekey-export.json "${MASTER_KEY}" >/tmp/offline-decrypt.txt
 python3 - <<'PY'
 raw = open('/tmp/offline-decrypt.txt').read()
 assert 'sk-smoke-value' in raw
