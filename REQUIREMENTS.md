@@ -384,6 +384,9 @@ MAJOR.MINOR.PATCH
 
 - 后端构建通过：`go build -o allinone-server ./cmd/server/main.go`。
 - 前端构建通过：`bun run build`。
+- GitHub Actions `CI` 工作流通过：gofmt、Go tests、后端构建、前端构建、clean DB release smoke。
+- GitHub Actions `Release` 工作流仅允许 `vX.Y.Z` 标签发布，并校验 `README.md` 与 `web/package.json` 版本一致；默认创建 Draft Release。
+- GitHub Actions `Docker Image` 工作流在 `master` 与版本 tag 上构建并发布 GHCR 镜像。
 - `REQUIREMENTS.md` 与当前功能状态一致。
 - 生产环境必须设置强随机 `ALLINONEKEY_JWT_SECRET` 与 `ALLINONEKEY_SESSION_SECRET`。
 - `README.md` 的使用方式与部署方式无明显过期内容。
