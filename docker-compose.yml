@@ -1,15 +1,23 @@
 services:
   allinonekey:
-    build: .
+    build:
+      context: .
+      args:
+        VITE_ALLINONEKEY_APP_VERSION: ${VITE_ALLINONEKEY_APP_VERSION:-0.1.0}
     ports:
       - "8080:8080"
     volumes:
       - ./data:/app/data
+    env_file:
+      - path: .env
+        required: false
     environment:
       - PORT=8080
       - GIN_MODE=release
       - ALLINONEKEY_DB_PATH=/app/data/allinone.db
       - ALLINONEKEY_DATA_DIR=/app/data
+      - ALLINONEKEY_APP_VERSION=${ALLINONEKEY_APP_VERSION:-0.1.0}
+      - VITE_ALLINONEKEY_APP_VERSION=${VITE_ALLINONEKEY_APP_VERSION:-0.1.0}
       - PUID=${PUID:-1000}
       - PGID=${PGID:-1000}
       - ALLINONEKEY_JWT_SECRET=${ALLINONEKEY_JWT_SECRET:?set ALLINONEKEY_JWT_SECRET before docker-up}

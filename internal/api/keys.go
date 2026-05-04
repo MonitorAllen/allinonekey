@@ -20,6 +20,7 @@ type KeyHandler struct {
 type keyInput struct {
 	KeyName  string `json:"key_name"`
 	KeyValue string `json:"key_value"`
+	Note     string `json:"note"`
 }
 
 func (h *KeyHandler) List(c *gin.Context) {
@@ -28,7 +29,8 @@ func (h *KeyHandler) List(c *gin.Context) {
 	var keys []model.APIKey
 	db := h.DB.Where("user_id = ?", userID)
 	if q != "" {
-		db = db.Where("provider LIKE ? OR key_name LIKE ? OR pool_group LIKE ?", "%"+q+"%", "%"+q+"%", "%"+q+"%")
+		like := "%" + q + "%"
+		db = db.Where("provider LIKE ? OR key_name LIKE ? OR pool_group LIKE ? OR provider_url LIKE ? OR note LIKE ?", like, like, like, like, like)
 	}
 	db.Order("created_at desc").Find(&keys)
 	c.JSON(200, keys)
@@ -94,12 +96,14 @@ func (h *KeyHandler) ListModels(c *gin.Context) {
 
 func (h *KeyHandler) CreateBulk(c *gin.Context) {
 	var in struct {
-		Provider string     `json:"provider" binding:"required"`
-		Group    string     `json:"pool_group"`
-		BaseURL  string     `json:"base_url"`
-		ProxyURL string     `json:"proxy_url"`
-		RawKeys  string     `json:"raw_keys"`
-		Keys     []keyInput `json:"keys"`
+		Provider    string     `json:"provider" binding:"required"`
+		Group       string     `json:"pool_group"`
+		BaseURL     string     `json:"base_url"`
+		ProxyURL    string     `json:"proxy_url"`
+		ProviderURL string     `json:"provider_url"`
+		Note        string     `json:"note"`
+		RawKeys     string     `json:"raw_keys"`
+		Keys        []keyInput `json:"keys"`
 	}
 	if err := c.ShouldBindJSON(&in); err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
@@ -129,14 +133,17 @@ func (h *KeyHandler) CreateBulk(c *gin.Context) {
 			return
 		}
 		if err := h.DB.Create(&model.APIKey{
-			UserID:    c.GetUint("user_id"),
-			Provider:  strings.TrimSpace(in.Provider),
-			PoolGroup: in.Group,
-			KeyName:   name,
-			KeyValue:  enc,
-			BaseURL:   strings.TrimSpace(in.BaseURL),
-			ProxyURL:  strings.TrimSpace(in.ProxyURL),
-			Status:    "active",
+			UserID:       c.GetUint("user_id"),
+			Provider:     strings.TrimSpace(in.Provider),
+			PoolGroup:    in.Group,
+			KeyName:      name,
+			KeyValue:     enc,
+			BaseURL:      strings.TrimSpace(in.BaseURL),
+			ProxyURL:     strings.TrimSpace(in.ProxyURL),
+			ProviderURL:  strings.TrimSpace(in.ProviderURL),
+			ProviderIcon: faviconURL(in.ProviderURL, ""),
+			Note:         keyNote(item, in.Note),
+			Status:       "active",
 		}).Error; err != nil {
 			c.JSON(500, gin.H{"error": "Failed to create key"})
 			return
@@ -146,7 +153,6 @@ func (h *KeyHandler) CreateBulk(c *gin.Context) {
 	h.DB.Create(&model.AuditLog{UserID: c.GetUint("user_id"), Action: "ADD_KEY", Detail: fmt.Sprintf("Added %d keys", count), IP: c.ClientIP()})
 	c.JSON(200, gin.H{"message": "success", "count": count})
 }
-
 func normalizeKeyInputs(keys []keyInput, rawKeys string) []keyInput {
 	if len(keys) > 0 {
 		return keys
@@ -162,15 +168,58 @@ func normalizeKeyInputs(keys []keyInput, rawKeys string) []keyInput {
 	return items
 }
 
+func keyNote(item keyInput, fallback string) string {
+	note := strings.TrimSpace(item.Note)
+	if note != "" {
+		return note
+	}
+	return strings.TrimSpace(fallback)
+}
+
+func (h *KeyHandler) UpdateProvider(c *gin.Context) {
+	var in struct {
+		Provider    string `json:"provider" binding:"required"`
+		NewProvider string `json:"new_provider"`
+		BaseURL     string `json:"base_url"`
+		ProxyURL    string `json:"proxy_url"`
+		ProviderURL string `json:"provider_url"`
+	}
+	if err := c.ShouldBindJSON(&in); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	provider := strings.TrimSpace(in.Provider)
+	newProvider := strings.TrimSpace(in.NewProvider)
+	if newProvider == "" {
+		newProvider = provider
+	}
+	updates := map[string]any{
+		"provider":      newProvider,
+		"base_url":      strings.TrimSpace(in.BaseURL),
+		"proxy_url":     strings.TrimSpace(in.ProxyURL),
+		"provider_url":  strings.TrimSpace(in.ProviderURL),
+		"provider_icon": faviconURL(in.ProviderURL, ""),
+	}
+	res := h.DB.Model(&model.APIKey{}).Where("user_id = ? AND provider = ?", c.GetUint("user_id"), provider).Updates(updates)
+	if res.RowsAffected == 0 {
+		c.JSON(404, gin.H{"error": "provider not found"})
+		return
+	}
+	h.DB.Create(&model.AuditLog{UserID: c.GetUint("user_id"), Action: "UPDATE_KEY_PROVIDER", Detail: "Updated API key provider metadata", IP: c.ClientIP()})
+	c.JSON(200, gin.H{"message": "updated", "count": res.RowsAffected})
+}
+
 func (h *KeyHandler) Update(c *gin.Context) {
 	var in struct {
-		Provider  string `json:"provider"`
-		PoolGroup string `json:"pool_group"`
-		KeyName   string `json:"key_name"`
-		BaseURL   string `json:"base_url"`
-		ProxyURL  string `json:"proxy_url"`
-		Status    string `json:"status"`
-		KeyValue  string `json:"key_value"`
+		Provider    string `json:"provider"`
+		PoolGroup   string `json:"pool_group"`
+		KeyName     string `json:"key_name"`
+		BaseURL     string `json:"base_url"`
+		ProxyURL    string `json:"proxy_url"`
+		ProviderURL string `json:"provider_url"`
+		Note        string `json:"note"`
+		Status      string `json:"status"`
+		KeyValue    string `json:"key_value"`
 	}
 	if err := c.ShouldBindJSON(&in); err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
@@ -186,12 +235,11 @@ func (h *KeyHandler) Update(c *gin.Context) {
 	if in.KeyName != "" {
 		updates["key_name"] = in.KeyName
 	}
-	if in.BaseURL != "" {
-		updates["base_url"] = in.BaseURL
-	}
-	if in.ProxyURL != "" {
-		updates["proxy_url"] = in.ProxyURL
-	}
+	updates["base_url"] = strings.TrimSpace(in.BaseURL)
+	updates["proxy_url"] = strings.TrimSpace(in.ProxyURL)
+	updates["provider_url"] = strings.TrimSpace(in.ProviderURL)
+	updates["provider_icon"] = faviconURL(in.ProviderURL, "")
+	updates["note"] = strings.TrimSpace(in.Note)
 	if in.Status != "" {
 		updates["status"] = in.Status
 	}

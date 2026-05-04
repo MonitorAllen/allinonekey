@@ -6,6 +6,8 @@ RUN npm install -g bun
 COPY web/package.json web/bun.lockb* ./
 RUN bun install
 COPY web/ ./
+ARG VITE_ALLINONEKEY_APP_VERSION=0.2.0
+ENV VITE_ALLINONEKEY_APP_VERSION=$VITE_ALLINONEKEY_APP_VERSION
 RUN bun run build
 
 # Build Backend
@@ -20,6 +22,7 @@ RUN go build -o server ./cmd/server/main.go
 # Final Image
 FROM alpine:latest
 WORKDIR /app
+ENV ALLINONEKEY_APP_VERSION=0.2.0
 RUN apk add --no-cache su-exec
 COPY --from=backend-builder /app/server .
 COPY --from=frontend-builder /web/dist ./web/dist

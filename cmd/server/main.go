@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"allinonekey/internal/api"
+	"allinonekey/internal/config"
 	"allinonekey/internal/model"
 	"allinonekey/internal/service"
 	"allinonekey/internal/util"
@@ -17,6 +18,8 @@ import (
 )
 
 func main() {
+	config.LoadDotEnv(".env")
+
 	dbPath := os.Getenv("ALLINONEKEY_DB_PATH")
 	if dbPath == "" {
 		dbPath = "data/allinone.db"
@@ -31,7 +34,16 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	db.AutoMigrate(&model.User{}, &model.APIKey{}, &model.Account{}, &model.InvitationCode{}, &model.AuditLog{})
+	db.AutoMigrate(
+		&model.User{},
+		&model.APIKey{},
+		&model.Account{},
+		&model.AccountPlatform{},
+		&model.AccountItem{},
+		&model.AccountCredential{},
+		&model.InvitationCode{},
+		&model.AuditLog{},
+	)
 
 	r := gin.Default()
 
@@ -53,11 +65,13 @@ func main() {
 	adminH := &api.AdminHandler{DB: db}
 	auditH := &api.AuditHandler{DB: db}
 	exportH := &api.ExportHandler{DB: db}
+	systemH := &api.SystemHandler{}
 
 	go quotaService.StartCron()
 
 	r.POST("/api/register", authH.Register)
 	r.POST("/api/login", authH.Login)
+	r.GET("/api/system/info", systemH.Info)
 
 	apiGroup := r.Group("/api")
 	apiGroup.Use(AuthMiddleware())
@@ -66,6 +80,7 @@ func main() {
 		apiGroup.GET("/keys/stats", keysH.GetStats)
 		apiGroup.POST("/keys/bulk", keysH.CreateBulk)
 		apiGroup.POST("/keys/create", keysH.CreateBulk)
+		apiGroup.PATCH("/key-providers/update", keysH.UpdateProvider)
 		apiGroup.POST("/keys/:id/check-quota", keysH.CheckQuota)
 		apiGroup.GET("/keys/:id/models", keysH.ListModels)
 		apiGroup.PATCH("/keys/:id", keysH.Update)
@@ -73,11 +88,18 @@ func main() {
 		apiGroup.GET("/keys/:id/decrypt", keysH.Decrypt)
 
 		apiGroup.GET("/accounts/list", accsH.List)
+		apiGroup.POST("/account-platforms/create", accsH.CreatePlatform)
+		apiGroup.PATCH("/account-platforms/:id", accsH.UpdatePlatform)
+		apiGroup.DELETE("/account-platforms/:id", accsH.DeletePlatform)
 		apiGroup.POST("/accounts/create", accsH.Create)
 		apiGroup.PATCH("/accounts/:id", accsH.Update)
 		apiGroup.DELETE("/accounts/:id", accsH.Delete)
 		apiGroup.GET("/accounts/:id/decrypt", accsH.Decrypt)
 		apiGroup.GET("/accounts/:id/totp", accsH.TOTP)
+		apiGroup.POST("/accounts/:id/credentials", accsH.CreateCredential)
+		apiGroup.PATCH("/account-credentials/:id", accsH.UpdateCredential)
+		apiGroup.DELETE("/account-credentials/:id", accsH.DeleteCredential)
+		apiGroup.GET("/account-credentials/:id/decrypt", accsH.DecryptCredential)
 
 		apiGroup.GET("/audit/list", auditH.List)
 
