@@ -10,8 +10,10 @@ import (
 )
 
 type exportPayload struct {
-	APIKeys  []apiKey  `json:"api_keys"`
-	Accounts []account `json:"accounts"`
+	APIKeys          []apiKey          `json:"api_keys"`
+	Accounts         []account         `json:"accounts"`
+	AccountPlatforms []accountPlatform `json:"account_platforms"`
+	AccountItems     []accountItem     `json:"account_items"`
 }
 
 type apiKey struct {
@@ -24,6 +26,19 @@ type apiKey struct {
 type account struct {
 	ID         uint   `json:"id"`
 	Platform   string `json:"platform"`
+	Account    string `json:"account"`
+	Password   string `json:"password"`
+	TOTPSecret string `json:"totp_secret"`
+}
+
+type accountPlatform struct {
+	ID   uint   `json:"id"`
+	Name string `json:"name"`
+}
+
+type accountItem struct {
+	ID         uint   `json:"id"`
+	PlatformID uint   `json:"platform_id"`
 	Account    string `json:"account"`
 	Password   string `json:"password"`
 	TOTPSecret string `json:"totp_secret"`
@@ -79,6 +94,25 @@ func decryptExportFile(path string, masterKey string) error {
 				secret = "[DECRYPT_FAILED]"
 			}
 			fmt.Printf("Account #%d %s/%s totp_secret: %s\n", a.ID, a.Platform, a.Account, secret)
+		}
+	}
+	platforms := map[uint]string{}
+	for _, p := range payload.AccountPlatforms {
+		platforms[p.ID] = p.Name
+	}
+	for _, a := range payload.AccountItems {
+		password, err := decryptString(a.Password, masterKey)
+		if err != nil {
+			password = "[DECRYPT_FAILED]"
+		}
+		platform := platforms[a.PlatformID]
+		fmt.Printf("Account #%d %s/%s password: %s\n", a.ID, platform, a.Account, password)
+		if a.TOTPSecret != "" {
+			secret, err := decryptString(a.TOTPSecret, masterKey)
+			if err != nil {
+				secret = "[DECRYPT_FAILED]"
+			}
+			fmt.Printf("Account #%d %s/%s totp_secret: %s\n", a.ID, platform, a.Account, secret)
 		}
 	}
 	return nil

@@ -4,7 +4,7 @@ Lightweight AI API Key & Personal Account Manager.
 
 ## Version
 
-Current version: `0.1.0`
+Current version: `0.2.0`
 
 The project follows SemVer-style `MAJOR.MINOR.PATCH` versioning.
 Git tags use `vX.Y.Z`, for example `v0.1.0`.
@@ -18,7 +18,9 @@ Git tags use `vX.Y.Z`, for example `v0.1.0`.
 - Multiple AI Key providers, pool groups, custom OpenAI-compatible relays, and per-key proxy URL
 - Batch API Key import
 - API Key health probing without fake balance accounting
-- Secure account vault with favicon and TOTP display
+- Secure account vault with platform/account/credential hierarchy, favicon, TOTP display, and credential expiry hints
+- Provider model listing per API Key with inline Dashboard search, sorting, and copy support
+- Provider metadata management with website URL, icon, base URL, and proxy URL
 - Invitation-based multi-user registration with expiry
 - Login brute-force cooldown
 - Admin-only invitation management

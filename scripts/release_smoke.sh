@@ -137,7 +137,7 @@ import json
 with open('/tmp/allinonekey-export.json') as f:
     data = json.load(f)
 assert data['version'] == '0.2.0'
-assert data['api_keys'] and data['accounts']
+assert data['api_keys'] and data['account_platforms'] and data['account_items']
 raw = open('/tmp/allinonekey-export.csv').read()
 assert 'api_key' in raw and 'account' in raw
 PY
